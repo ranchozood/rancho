@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Ranchozod – Admin</title>
+<style>
+:root{--teal:#0a4a52;--cream:#fbf6e6;--w1:#4fd8c8;--bg:#04292f}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:linear-gradient(#0a6b75,#04292f);color:var(--cream);font:700 1rem/1.5 system-ui,sans-serif;padding:24px 16px}
+.wrap{max-width:760px;margin:0 auto}
+h1{margin:0 0 4px;font-size:2rem}
+.sub{opacity:.75;margin:0 0 24px}
+.box{background:rgba(251,246,230,.08);border:1px solid rgba(251,246,230,.2);border-radius:16px;padding:20px;margin-bottom:16px}
+input{width:100%;padding:12px 14px;border-radius:10px;border:0;font:inherit;color:var(--teal)}
+button{background:var(--cream);color:var(--teal);border:0;border-radius:999px;padding:10px 20px;font:inherit;cursor:pointer;margin-top:12px}
+button:hover{background:var(--w1)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.stat .n{font-size:2.4rem;line-height:1.1;color:var(--w1)}
+.stat .l{opacity:.8;font-size:.9rem}
+table{width:100%;border-collapse:collapse}
+td,th{text-align:left;padding:10px 6px;border-bottom:1px solid rgba(251,246,230,.15)}
+td:last-child,th:last-child{text-align:right}
+.err{color:#ffb4a8;min-height:1.4em;margin:8px 0 0}
+.note{font-size:.85rem;opacity:.7;font-weight:600}
+.hide{display:none}
+code{background:rgba(0,0,0,.3);padding:2px 6px;border-radius:6px;word-break:break-all}
+</style></head><body>
+<div class="wrap">
+<h1>Ranchozod Admin</h1>
+<p class="sub">Visitors and wallpaper downloads</p>
+
+<!-- ===== EDIT HERE ===== -->
+<script>
+const GC_CODE='ranchozod';      /* your GoatCounter site code, same as in index.html */
+const PASS_HASH='';    /* SHA-256 of your password. Leave empty to generate one below */
+const WALLS=[
+ {file:'scout-wallpaper.jpg',title:'Scout'},
+ {file:'scout-and-yung.jpg',title:'Scout and Yung'}
+];
+</script>
+<!-- ===================== -->
+
+<div id="setup" class="box hide">
+ <b>First-time setup</b>
+ <p class="note">Type the password you want. Copy the code it shows into <code>PASS_HASH</code> at the top of this file, then re-upload.</p>
+ <input id="newpw" type="text" placeholder="Choose a password">
+ <button id="mk">Generate code</button>
+ <p id="hashout" class="note"></p>
+</div>
+
+<div id="login" class="box hide">
+ <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+ <button id="go">Open dashboard</button>
+ <p class="err" id="err"></p>
+</div>
+
+<div id="dash" class="hide">
+ <div class="grid" id="cards"></div>
+ <div class="box" style="margin-top:16px">
+  <table><thead><tr><th>Wallpaper</th><th>Downloads</th></tr></thead><tbody id="rows"></tbody></table>
+ </div>
+ <button id="refresh">Refresh</button>
+ <p class="note" id="status"></p>
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const sha=async t=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+const store={get(){try{return sessionStorage.getItem('rz_ok')}catch(e){return null}},set(){try{sessionStorage.setItem('rz_ok','1')}catch(e){}}};
+
+async function counter(path){
+ const r=await fetch('https://'+GC_CODE+'.goatcounter.com/counter/'+encodeURIComponent(path)+'.json');
+ if(r.status===404)return {count:'0',count_unique:'0'};
+ if(!r.ok)throw new Error('HTTP '+r.status);
+ return r.json();
+}
+const num=s=>parseInt(String(s).replace(/[^0-9]/g,''),10)||0;
+
+async function load(){
+ $('status').textContent='Loading...';
+ try{
+  const [home,...dl]=await Promise.all([counter('/'),...WALLS.map(w=>counter('download/'+w.file))]);
+  const total=dl.reduce((a,d)=>a+num(d.count),0);
+  $('cards').innerHTML='';
+  [[num(home.count),'Total visits'],[num(home.count_unique),'Unique visitors'],[total,'Total downloads']].forEach(([n,l])=>{
+   const d=document.createElement('div');d.className='box stat';
+   const a=document.createElement('div');a.className='n';a.textContent=n.toLocaleString();
+   const b=document.createElement('div');b.className='l';b.textContent=l;
+   d.append(a,b);$('cards').append(d);
+  });
+  $('rows').innerHTML='';
+  WALLS.forEach((w,i)=>{
+   const tr=document.createElement('tr');
+   const a=document.createElement('td');a.textContent=w.title;
+   const b=document.createElement('td');b.textContent=num(dl[i].count).toLocaleString();
+   tr.append(a,b);$('rows').append(tr);
+  });
+  $('status').textContent='Updated '+new Date().toLocaleTimeString();
+ }catch(e){
+  $('status').textContent='Could not load stats ('+e.message+'). Check GC_CODE and that "Allow adding visitor counts on your website" is on in GoatCounter settings.';
+ }
+}
+function show(){$('login').classList.add('hide');$('dash').classList.remove('hide');load()}
+
+if(!PASS_HASH){
+ $('setup').classList.remove('hide');
+ $('mk').onclick=async()=>{const v=$('newpw').value;if(!v)return;$('hashout').textContent='';const c=document.createElement('code');c.textContent=await sha(v);$('hashout').append(c)};
+}else if(!GC_CODE){
+ $('login').classList.remove('hide');$('go').disabled=true;$('err').textContent='Set GC_CODE at the top of admin.html first.';
+}else{
+ if(store.get()==='1')show();else $('login').classList.remove('hide');
+ const tryLogin=async()=>{
+  if(await sha($('pw').value)===PASS_HASH){store.set();show()}else $('err').textContent='Wrong password';
+ };
+ $('go').onclick=tryLogin;
+ $('pw').addEventListener('keydown',e=>{if(e.key==='Enter')tryLogin()});
+ $('refresh').onclick=load;
+}
+</script>
+</body></html>
